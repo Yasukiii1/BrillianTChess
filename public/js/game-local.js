@@ -4,6 +4,7 @@ import { Board } from './board.js';
 import { RookieEngine, StockfishEngine } from './engines.js';
 import { $, renderMoves, setStatus, strip, showBanner, button, gameOverReason, themePicker, saveForReview } from './ui.js';
 import { getName } from './identity.js';
+import { LiveReviewer } from './review/live.js';
 
 export function startLocal({ opp, color }) {
   const chess = new Chess();
@@ -18,6 +19,9 @@ export function startLocal({ opp, color }) {
   $('fenTools').classList.remove('hidden');
 
   const board = new Board($('board'), { onMove: onHumanMove });
+  // Second Stockfish that silently checks each position while you play,
+  // so the game review is (almost) instant when the game ends.
+  const live = new LiveReviewer();
   board.setOrientation(myColor);
   themePicker(board);
 
@@ -47,6 +51,7 @@ export function startLocal({ opp, color }) {
   }
 
   function refresh() {
+    live.push(chess.fen());
     const over = gameOverReason(chess);
     const myTurn = !over && !resigned && chess.turn() === myColor && !thinking;
     board.setPosition(chess.fen(), {
@@ -147,6 +152,7 @@ export function startLocal({ opp, color }) {
       white: myColor === 'w' ? me : engine.name, black: myColor === 'b' ? me : engine.name,
       result: resigned ? (myColor === 'w' ? '0-1' : '1-0') : over ? over.result : '*',
     });
+    live.flush();
     window.open('/review.html', '_blank');
   }
 

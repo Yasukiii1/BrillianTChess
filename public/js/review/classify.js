@@ -120,12 +120,21 @@ export function classify(game, analyses, labelOf = (p) => (p.color === 'w' ? 'Wh
     const best = before.lines[0];
     const second = before.lines[1];
     const winBefore = winPct(best.score);
+    // Score of the move actually played. Prefer the SAME search as the best move
+    // (MultiPV line), so both are judged at the same depth; otherwise use the
+    // evaluation of the position after the move.
+    const playedLine = before.lines.find((l) => l.pv[0] === p.uci);
     let afterScore;
     if (after.terminal === 'mate') afterScore = { mate: 1 };       // we just mated them
     else if (after.terminal === 'draw') afterScore = { cp: 0 };
-    else afterScore = neg(after.lines[0].score);
+    else {
+      afterScore = neg(after.lines[0].score);
+      // Same-search score is less noisy, but if the position-after search found a
+      // real refutation (much worse), trust that deeper look instead.
+      if (playedLine && winPct(afterScore) > winPct(playedLine.score) - 10) afterScore = playedLine.score;
+    }
     const winAfter = winPct(afterScore);
-    const isBest = best.pv[0] === p.uci || p.mateAfter;
+    const isBest = best.pv[0] === p.uci || p.mateAfter || (playedLine && winAfter >= winBefore - 0.3);
     const loss = isBest ? 0 : Math.max(0, winBefore - winAfter);
 
     let label;

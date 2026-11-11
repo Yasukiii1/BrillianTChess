@@ -21,14 +21,14 @@ engine.listener = (line) => {
   else if (line.startsWith('bestmove')) { const j = job; job = null; j.resolve({ lines: j.lines.filter(Boolean) }); }
 };
 engine.sendCommand('uci');
-engine.sendCommand('setoption name MultiPV value 2');
+engine.sendCommand('setoption name MultiPV value 3');
 const analyze = (fen, depth) => new Promise((resolve) => {
   job = { resolve, lines: [] };
   engine.sendCommand(`position fen ${fen}`);
   engine.sendCommand(`go depth ${depth}`);
 });
 
-async function review(sans, depth = 12) {
+async function review(sans, depth = 16) {
   const game = buildGame(Chess, new Chess().fen(), sans);
   const analyses = [];
   const positions = [game.startFen, ...game.plies.map((p) => p.fenAfter)];

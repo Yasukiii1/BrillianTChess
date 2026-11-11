@@ -2,7 +2,8 @@
 // the game with an eval bar, eval graph, best-move arrows and accuracy per player.
 import { Chess } from '/vendor/chess.js';
 import { Board } from '../board.js';
-import { Analyzer } from './analyzer.js';
+import { AnalyzerPool } from './analyzer.js';
+import { getEval, putEval, flushEvals, reloadEvals } from './cache.js';
 import { buildGame, classify, LABELS, LABEL_ORDER, fmtScore } from './classify.js';
 import { esc, saveForReview } from '../ui.js';
 
@@ -10,7 +11,7 @@ const $ = (id) => document.getElementById(id);
 
 // ---------- which game? ----------
 let data = loadSaved();
-let game, result, analyses, cur, board, analyzer, runId = 0;
+let game, result, analyses, cur, board, pool, runId = 0;
 function loadSaved() {
   try { return JSON.parse(localStorage.getItem('chess-review') || 'null'); } catch { return null; }
 }
@@ -49,6 +50,7 @@ function start() {
     $('last').onclick = () => go(game.plies.length - 1);
     $('flip').onclick = () => { board.flip(); show(); };
     $('rerun').onclick = () => run(+$('depth').value);
+    $('depth').onchange = () => run(+$('depth').value);
     $('graph').onclick = (e) => {
       const r = $('graph').getBoundingClientRect();
       go(Math.round(((e.clientX - r.left) / r.width) * game.plies.length) - 1);
@@ -73,58 +75,59 @@ function start() {
 const go = (i) => { cur = Math.max(-1, Math.min(game.plies.length - 1, i)); show(); };
 
 // ---------- analysis ----------
-function cacheKey(depth) {
-  const s = depth + '|' + data.startFen + '|' + data.sans.join(' ');
-  let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
-  return 'chess-review-cache:' + h;
-}
-
 async function run(depth) {
   const my = ++runId;
-  const key = cacheKey(depth);
-  let cached = null;
-  try { cached = JSON.parse(localStorage.getItem(key) || 'null'); } catch { /* ignore */ }
+  if (pool) pool.cancel();
+  reloadEvals(); // pick up what the live reviewer saved during the game
   const positions = [game.startFen, ...game.plies.map((p) => p.fenAfter)];
-  if (cached && cached.length === positions.length) {
-    analyses = cached;
-    finish('Loaded saved review.');
+  analyses = positions.map((fen) => {
+    const c = new Chess(fen);
+    if (c.isCheckmate()) return { terminal: 'mate' };
+    if (c.isGameOver()) return { terminal: 'draw' };
+    return getEval(fen, depth);
+  });
+  const missing = analyses.map((a, i) => (a ? -1 : i)).filter((i) => i >= 0);
+  const already = analyses.filter((a) => a && !a.terminal).length; // checked earlier (live or saved)
+  result = classify(game, analyses, labelOf); renderMoveList(); renderSummary(); show();
+  if (!missing.length) {
+    finish(`All ${positions.length - 1} moves were already checked by the live reviewer (depth ${depth}+). Instant!`);
     return;
   }
-  analyses = [];
-  if (!analyzer) analyzer = new Analyzer();
-  $('progWrap').classList.remove('hidden');
+  if (!pool) pool = new AnalyzerPool();
   $('rerun').disabled = true;
   const t0 = Date.now();
-  for (let i = 0; i < positions.length; i++) {
+  let done = 0, lastDraw = 0;
+  const progress = () => {
+    $('prog').style.width = `${((already + done) / positions.length) * 100}%`;
+    $('progText').textContent = `Stockfish ×${pool.size} checking… ${done} of ${missing.length} positions` +
+      (already ? ` (${already} already checked)` : '') + ` · depth ${depth}`;
+  };
+  progress();
+  await Promise.all(missing.map((i) => pool.analyze(positions[i], depth).then((a) => {
     if (my !== runId) return;
-    const c = new Chess(positions[i]);
-    if (c.isCheckmate()) analyses[i] = { terminal: 'mate' };
-    else if (c.isGameOver()) analyses[i] = { terminal: 'draw' };
-    else {
-      const a = await analyzer.analyze(positions[i], depth);
-      if (my !== runId) return;
-      a.lines = a.lines.map((l) => ({ score: l.score, pv: l.pv.slice(0, 8) }));
-      analyses[i] = a;
-    }
-    $('prog').style.width = `${((i + 1) / positions.length) * 100}%`;
-    $('progText').textContent = `Stockfish is checking move ${Math.ceil(i / 2) || 1} of ${Math.ceil(game.plies.length / 2)}… (depth ${depth})`;
-    if (i % 4 === 0 || i === positions.length - 1) { result = classify(game, analyses, labelOf); renderMoveList(); renderSummary(); show(); }
-  }
-  try { localStorage.setItem(key, JSON.stringify(analyses)); } catch { /* storage full: fine */ }
-  finish(`Checked ${positions.length - 1} moves in ${((Date.now() - t0) / 1000).toFixed(0)}s at depth ${depth}.`);
+    if (a) { analyses[i] = a; putEval(positions[i], a); }
+    done++;
+    progress();
+    if (Date.now() - lastDraw > 400) { lastDraw = Date.now(); result = classify(game, analyses, labelOf); renderMoveList(); renderSummary(); show(); }
+  })));
+  if (my !== runId) return;
+  flushEvals();
+  const failed = analyses.filter((a) => !a).length;
+  finish(`Checked ${missing.length} positions in ${((Date.now() - t0) / 1000).toFixed(1)}s` +
+    (already ? ` (${already} were already checked)` : '') + ` · depth ${depth}.` + (failed ? ` ${failed} failed, press Re-check.` : ''));
 }
 
 function finish(msg) {
   result = classify(game, analyses, labelOf);
   $('prog').style.width = '100%';
-  $('progText').textContent = msg + ' Use Deep for an even more accurate check.';
+  $('progText').textContent = msg;
   $('rerun').disabled = false;
   $('rerun').textContent = 'Re-check';
   renderMoveList(); renderSummary(); show();
 }
 
 // ---------- drawing ----------
-const ico = (k) => `<span class="ico" style="background:${LABELS[k].color}">${LABELS[k].icon}</span>`;
+function ico(k) { return `<span class="ico" style="background:${LABELS[k].color}">${LABELS[k].icon}</span>`; }
 
 function renderSummary() {
   const names = Object.keys(result.players);

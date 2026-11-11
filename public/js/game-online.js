@@ -3,6 +3,7 @@
 import { Board } from './board.js';
 import { $, esc, renderMoves, setStatus, strip, showBanner, button, themePicker, saveForReview } from './ui.js';
 import { getName, setName, getToken } from './identity.js';
+import { LiveReviewer } from './review/live.js';
 
 export function startOnline(code) {
   let name = getName();
@@ -25,6 +26,9 @@ export function startOnline(code) {
   });
 
   themePicker(board);
+  // Checks positions in the background during the game (results stay hidden until
+  // you open the review after the game).
+  const live = new LiveReviewer();
 
   // ----- share link -----
   const link = `${location.origin}/play.html?room=${code}`;
@@ -64,6 +68,7 @@ export function startOnline(code) {
       sans: s.moves.map((m) => m.san), labels, white, black,
       orientation: me >= 0 ? seatColor(s, me) : 'w', result: s.result ? s.result.result : '*',
     });
+    live.flush();
     window.open('/review.html', '_blank');
   }
 
@@ -77,7 +82,11 @@ export function startOnline(code) {
     });
   });
   socket.on('disconnect', () => setStatus('Connection lost, reconnecting…'));
-  socket.on('state', (s) => { state = s; render(); });
+  socket.on('state', (s) => {
+    state = s;
+    render();
+    live.pushGame('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1', s.moves.map((m) => m.san));
+  });
 
   let flashTimer = null;
   function flash(msg) {

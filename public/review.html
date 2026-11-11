@@ -28,11 +28,11 @@
       <div class="row" style="align-items:end">
         <div style="flex:2"><label for="depth" style="margin-top:0">Engine check</label>
           <select id="depth">
-            <option value="10">Fast (depth 10)</option>
-            <option value="14" selected>Normal (depth 14)</option>
-            <option value="18">Deep (depth 18, most accurate)</option>
+            <option value="14">Fast (depth 14)</option>
+            <option value="18" selected>Strong (depth 18, checked live)</option>
+            <option value="22">Deep (depth 22, slow, most accurate)</option>
           </select></div>
-        <button id="rerun" style="flex:1">Analyze</button>
+        <button id="rerun" style="flex:1">Re-check</button>
       </div>
       <div id="progWrap"><div class="small" id="progText">Starting Stockfish…</div><div class="progress"><div id="prog"></div></div></div>
       <div class="rv-head" id="summary"></div>
