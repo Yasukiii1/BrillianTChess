@@ -5,6 +5,7 @@ import { Chess } from 'chess.js';
 import assert from 'node:assert';
 import { buildGame, classify, parseInfo, fmtScore } from '../public/js/review/classify.js';
 import { OPENINGS } from '../public/js/review/openings.js';
+import { explain, _internals } from '../public/js/review/coach.js';
 
 // 1. Every opening line in the book must be legal.
 for (const o of OPENINGS) { const c = new Chess(); for (const m of o.moves) c.move(m); }
@@ -63,6 +64,24 @@ r = await review('e4 e5 Qh5 Nc6 Bc4 Nf6 Qxf7#'.split(' '));
 console.log(show(r));
 assert.strictEqual(lab('Nf6'), 'blunder');
 console.log('✓ Nf6?? walking into mate is a blunder');
+
+// ---- Coach ----
+const say = (res, san, color) => { const i = res.moves.findIndex((m) => m.san === san && (!color || m.color === color)); const e = explain(Chess, res.moves[i], res.moves[i - 1]); console.log('  [' + res.moves[i].label + '] ' + san + ': ' + e.text.join(' ') + (e.lines.length ? '  {lines: ' + e.lines.map((l) => l.title + ' = ' + l.sans).join(' | ') + '}' : '')); return e; };
+r = await review('e4 e5 Nf3 d6 Bc4 Bg4 Nc3 g6 Nxe5 Bxd1 Bxf7+ Ke7 Nd5#'.split(' '));
+let e = say(r, 'Nxe5'); assert.match(e.text.join(' '), /sacrifice/); assert.ok(e.lines.length);
+e = say(r, 'Bxd1'); assert.match(e.text.join(' '), /checkmate/); assert.ok(e.lines.some((l) => /goes wrong/.test(l.title)));
+say(r, 'Bxf7+'); say(r, 'Ke7');
+r = await review('e4 e5 Qh5 Nc6 Bc4 Nf6 Qxf7#'.split(' '));
+e = say(r, 'Bc4'); assert.match(e.text.join(' '), /threatens Qxf7# checkmate/i);
+e = say(r, 'Nf6'); assert.match(e.text.join(' '), /checkmate/);
+r = await review('e4 e5 Nf3 Nc6 Bc4 Nd4 Nxe5 Qg5 Nxf7 Qxg2 Rf1 Qxe4+ Be2 Nf3#'.split(' '));
+say(r, 'Nxe5'); say(r, 'Qg5'); say(r, 'Nxf7'); say(r, 'Qxg2');
+// pattern detectors
+let c = new Chess('r3k3/8/8/1N6/8/8/8/4K3 w - - 0 1'); let mv = c.move('Nc7+');
+assert.ok(_internals.forkTargets(c, mv), 'knight fork'); console.log('✓ fork detected');
+c = new Chess('4k3/3p4/2n5/8/8/8/8/4KB2 w - - 0 1'); c.remove('d7'); mv = c.move('Bb5');
+assert.strictEqual(_internals.pinOrSkewer(c, mv).kind, 'pin'); console.log('✓ pin detected');
+console.log('✓ coach explanations look right');
 
 assert.strictEqual(fmtScore({ cp: 130 }, 'w'), '+1.3');
 assert.strictEqual(fmtScore({ mate: 2 }, 'b'), '-M2');

@@ -6,6 +6,7 @@ import { AnalyzerPool } from './analyzer.js';
 import { getEval, putEval, flushEvals, reloadEvals } from './cache.js';
 import { buildGame, classify, LABELS, LABEL_ORDER, fmtScore } from './classify.js';
 import { esc, saveForReview } from '../ui.js';
+import { explain } from './coach.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -26,10 +27,6 @@ $('loadPgn').onclick = () => {
   start();
 };
 
-if (!data || !data.sans?.length) {
-  $('progText').textContent = 'No game to review yet. Finish a game and press "Game review", or paste a PGN below.';
-  document.querySelector('details').open = true;
-} else start();
 
 
 function labelOf(p) {
@@ -44,10 +41,10 @@ function start() {
   cur = game.plies.length - 1;
   if (!board) {
     board = new Board($('board'));
-    $('first').onclick = () => go(-1);
-    $('prev').onclick = () => go(cur - 1);
-    $('next').onclick = () => go(cur + 1);
-    $('last').onclick = () => go(game.plies.length - 1);
+    $('first').onclick = () => (vline ? stepLine(-99) : go(-1));
+    $('prev').onclick = () => (vline ? stepLine(-1) : go(cur - 1));
+    $('next').onclick = () => (vline ? stepLine(1) : go(cur + 1));
+    $('last').onclick = () => (vline ? stepLine(99) : go(game.plies.length - 1));
     $('flip').onclick = () => { board.flip(); show(); };
     $('rerun').onclick = () => run(+$('depth').value);
     $('depth').onchange = () => run(+$('depth').value);
@@ -57,7 +54,10 @@ function start() {
     };
     window.addEventListener('keydown', (e) => {
       if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
-      if (e.key === 'ArrowLeft') go(cur - 1);
+      if (vline && e.key === 'ArrowLeft') stepLine(-1);
+      else if (vline && e.key === 'ArrowRight') stepLine(1);
+      else if (vline && e.key === 'Escape') stopLine();
+      else if (e.key === 'ArrowLeft') go(cur - 1);
       else if (e.key === 'ArrowRight') go(cur + 1);
       else if (e.key === 'Home') go(-1);
       else if (e.key === 'End') go(game.plies.length - 1);
@@ -72,7 +72,7 @@ function start() {
   run(+$('depth').value);
 }
 
-const go = (i) => { cur = Math.max(-1, Math.min(game.plies.length - 1, i)); show(); };
+const go = (i) => { if (vline) stopLine(false); cur = Math.max(-1, Math.min(game.plies.length - 1, i)); show(); };
 
 // ---------- analysis ----------
 async function run(depth) {
@@ -166,8 +166,63 @@ function uciToSan(fen, uci) {
   try { return new Chess(fen).move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] }).san; } catch { return uci; }
 }
 
+// ---------- line player: plays a coach line on the board ----------
+let coachLines = [];
+let vline = null; // { title, fens, moves:[{from,to,san}], idx, timer }
+
+function startLine(line) {
+  stopLine(false);
+  const c = new Chess(line.fen);
+  const fens = [c.fen()], moves = [];
+  for (const u of line.ucis) {
+    let mv;
+    try { mv = c.move({ from: u.slice(0, 2), to: u.slice(2, 4), promotion: u[4] || undefined }); } catch { break; }
+    moves.push({ from: mv.from, to: mv.to, san: mv.san, color: mv.color, no: Math.ceil(fens.length / 2) });
+    fens.push(c.fen());
+  }
+  vline = { title: line.title, fens, moves, idx: 0, startNo: new Chess(line.fen).moveNumber(), firstColor: new Chess(line.fen).turn() };
+  renderLine();
+  // auto-play the line once, one move every 0.9s
+  vline.timer = setInterval(() => {
+    if (!vline || vline.idx >= vline.moves.length) { if (vline) clearInterval(vline.timer); return; }
+    vline.idx++; renderLine();
+  }, 900);
+}
+
+function stepLine(d) {
+  if (!vline) return;
+  clearInterval(vline.timer);
+  vline.idx = Math.max(0, Math.min(vline.moves.length, vline.idx + d));
+  renderLine();
+}
+
+function stopLine(redraw = true) {
+  if (vline) clearInterval(vline.timer);
+  vline = null;
+  if (redraw) show();
+}
+
+function renderLine() {
+  const v = vline;
+  const last = v.idx > 0 ? v.moves[v.idx - 1] : null;
+  board.setPosition(v.fens[v.idx], { lastMove: last ? { from: last.from, to: last.to } : null });
+  const next = v.moves[v.idx];
+  board.setDecor({ arrows: next ? [{ from: next.from, to: next.to, color: 'blue' }] : [], badge: null });
+  let no = v.startNo;
+  const parts = v.moves.map((mv, i) => {
+    const prefix = mv.color === 'w' ? `${no}.` : i === 0 ? `${no}...` : '';
+    if (mv.color === 'b') no++;
+    return `<span class="vm${i === v.idx - 1 ? ' cur' : ''}" data-i="${i + 1}">${prefix}${esc(mv.san)}</span>`;
+  });
+  $('comment').innerHTML = `<div class="vline-head"><b>▶ ${esc(v.title)}</b><button id="exitLine">✕ Back to game</button></div>` +
+    `<div class="vline">${parts.join(' ')}</div>` +
+    `<div class="small">Move ${v.idx} of ${v.moves.length} · ◀ ▶ to step · Esc to go back</div>`;
+  $('exitLine').onclick = () => stopLine();
+  $('comment').querySelectorAll('.vm').forEach((el) => (el.onclick = () => { clearInterval(v.timer); v.idx = +el.dataset.i; renderLine(); }));
+}
+
 function show() {
-  if (!game) return;
+  if (!game || vline) return; // while a coach line is playing, leave the board alone
   const p = cur >= 0 ? game.plies[cur] : null;
   const m = cur >= 0 ? result.moves[cur] : null;
   const fen = p ? p.fenAfter : game.startFen;
@@ -210,22 +265,18 @@ function show() {
     const L = LABELS[m.label];
     const noTxt = `${Math.floor(p.ply / 2) + new Chess(game.startFen).moveNumber()}${p.color === 'w' ? '.' : '...'}`;
     const article = /^[AEIOU]/.test(L.name) ? 'an' : 'a';
-    const extra = {
-      brilliant: 'A brilliant sacrifice that still keeps a good position!',
-      great: 'The only good move here, well found!',
-      book: game.opening ? `Opening theory (${esc(game.opening)}).` : 'Opening theory.',
-      forced: 'The only legal move.',
-      miss: 'Your opponent just made a mistake, and this move doesn’t take advantage of it.',
-    }[m.label] || '';
-    let best = '';
-    if (!quiet.includes(m.label) && m.bestUci) {
-      best = `<br>Best was <b>${esc(uciToSan(p.fenBefore, m.bestUci))}</b> (${fmtScore(m.bestScore, p.color === 'w' ? 'w' : 'b')} for White).`;
-    }
+    // The Coach explains why, using the engine's lines
+    const ex = explain(Chess, m, result.moves[cur - 1]);
+    if (m.label === 'book' && game.opening) ex.text.push(`Opening: ${game.opening}.`);
+    coachLines = ex.lines;
     html = `${ico(m.label)} <b style="color:${L.color}">${noTxt} ${esc(p.san)} is ${m.label === 'best' ? 'the best move' : article + ' ' + L.name.toLowerCase() + (m.label === 'book' ? ' move' : '')}</b>` +
-      `<span class="small"> · ${esc(m.who)}</span><br>${extra}${best}` +
-      `<br><span class="small">Eval after: ${fmtScore(m.playedScore, p.color)} · win chance lost: ${m.loss.toFixed(1)}%</span>`;
+      `<span class="small"> · ${esc(m.who)}</span>` +
+      `<div class="coach"><span class="coach-tag">Coach</span>${ex.text.map((t) => `<p>${esc(t)}</p>`).join('')}</div>` +
+      ex.lines.map((l, i) => `<button class="line-btn" data-line="${i}">▶ ${esc(l.title)}</button><div class="line-san">${esc(l.sans)}</div>`).join('') +
+      `<div class="small" style="margin-top:6px">Eval after: ${fmtScore(m.playedScore, p.color)} · win chance lost: ${m.loss.toFixed(1)}%</div>`;
   }
   $('comment').innerHTML = html;
+  $('comment').querySelectorAll('.line-btn').forEach((b) => (b.onclick = () => startLine(coachLines[+b.dataset.line])));
 
   // highlight in move list
   $('moves').querySelectorAll('.m').forEach((el) => el.classList.toggle('cur', +el.dataset.i === cur));
@@ -251,3 +302,9 @@ function drawGraph() {
   svg.innerHTML = `<path d="${d}" fill="#f2f2f2"/><line x1="0" x2="${n}" y1="50" y2="50" stroke="#888" stroke-width="0.5" vector-effect="non-scaling-stroke"/>` +
     `<line x1="${cur + 1}" x2="${cur + 1}" y1="0" y2="100" stroke="var(--accent)" stroke-width="2" vector-effect="non-scaling-stroke"/>${dots}`;
 }
+
+// ---------- go! (last, so every helper above is defined) ----------
+if (!data || !data.sans?.length) {
+  $('progText').textContent = 'No game to review yet. Finish a game and press "Game review", or paste a PGN below.';
+  document.querySelector('details').open = true;
+} else start();

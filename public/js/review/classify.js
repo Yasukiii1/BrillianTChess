@@ -154,7 +154,9 @@ export function classify(game, analyses, labelOf = (p) => (p.color === 'w' ? 'Wh
     out.push({
       ...p, label, loss, accuracy, winBefore, winAfter,
       bestUci: best.pv[0], bestScore: best.score, playedScore: afterScore,
-      bestLine: best.pv.slice(0, 6), who: labelOf(p),
+      bestLine: best.pv.slice(0, 10), who: labelOf(p),
+      // opponent's best answer after the move played (used to explain mistakes)
+      replyLine: after.lines?.[0]?.pv?.slice(0, 9) || null,
     });
     prevLoss = loss;
   }
