@@ -2,7 +2,7 @@
 import { Chess } from '/vendor/chess.js';
 import { Board } from './board.js';
 import { RookieEngine, StockfishEngine } from './engines.js';
-import { $, renderMoves, setStatus, strip, showBanner, button, gameOverReason } from './ui.js';
+import { $, renderMoves, setStatus, strip, showBanner, button, gameOverReason, themePicker } from './ui.js';
 import { getName } from './identity.js';
 
 export function startLocal({ opp, color }) {
@@ -19,6 +19,7 @@ export function startLocal({ opp, color }) {
 
   const board = new Board($('board'), { onMove: onHumanMove });
   board.setOrientation(myColor);
+  themePicker(board);
 
   // ----- controls -----
   const controls = $('controls');
@@ -33,6 +34,7 @@ export function startLocal({ opp, color }) {
     const fen = $('fenInput').value.trim();
     try { chess.load(fen); } catch (e) { alert('Invalid FEN: ' + e.message); return; }
     startFen = chess.fen(); gameId++; thinking = false; resigned = false;
+    board.clearPremoves();
     refresh();
     maybeBotMove();
   };
@@ -46,7 +48,11 @@ export function startLocal({ opp, color }) {
   function refresh() {
     const over = gameOverReason(chess);
     const myTurn = !over && !resigned && chess.turn() === myColor && !thinking;
-    board.setPosition(chess.fen(), { lastMove: lastMove(), movableColor: myTurn ? myColor : null });
+    board.setPosition(chess.fen(), {
+      lastMove: lastMove(),
+      movableColor: myTurn ? myColor : null,
+      premoveColor: !over && !resigned ? myColor : null, // queue moves while the bot thinks
+    });
 
     const botColor = myColor === 'w' ? 'b' : 'w';
     const top = board.orientation === myColor ? 'bot' : 'me';
@@ -103,6 +109,7 @@ export function startLocal({ opp, color }) {
 
   function newGame(color) {
     gameId++; thinking = false; resigned = false;
+    board.clearPremoves();
     myColor = color;
     chess.reset();
     startFen = chess.fen();
@@ -113,6 +120,7 @@ export function startLocal({ opp, color }) {
 
   function undo() {
     gameId++; thinking = false; resigned = false;
+    board.clearPremoves();
     // Take back moves until it's your turn again (normally 2 half-moves).
     if (chess.history().length === 0) return refresh();
     chess.undo();

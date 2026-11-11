@@ -1,7 +1,7 @@
 // Online rooms: Boss Raid (co-op) and 1v1. The server decides everything; this
 // page just shows the server's state and sends your moves.
 import { Board } from './board.js';
-import { $, esc, renderMoves, setStatus, strip, showBanner, button } from './ui.js';
+import { $, esc, renderMoves, setStatus, strip, showBanner, button, themePicker } from './ui.js';
 import { getName, setName, getToken } from './identity.js';
 
 export function startOnline(code) {
@@ -23,6 +23,8 @@ export function startOnline(code) {
       });
     },
   });
+
+  themePicker(board);
 
   // ----- share link -----
   const link = `${location.origin}/play.html?room=${code}`;
@@ -68,10 +70,19 @@ export function startOnline(code) {
     if (!s) return;
     const me = s.yourSeat; // 0, 1, or -1 (spectator)
     const myColor = me >= 0 ? seatColor(s, me) : 'w';
-    const key = `${s.gameNo}:${me}`;
+    // Orientation: in Boss Raid BOTH teammates always see their team's colour at the bottom.
+    // In 1v1 each player sees their own colour at the bottom. (Flip only changes your own screen.)
+    const key = `${s.gameNo}:${me}:${myColor}`;
     if (orientedFor !== key) { board.setOrientation(myColor); orientedFor = key; }
 
-    board.setPosition(s.fen, { lastMove: s.lastMove, movableColor: s.whoMoves === me && me >= 0 ? myColor : null });
+    const waitingForPlayers = s.players.some((p) => !p);
+    board.setPosition(s.fen, {
+      lastMove: s.lastMove,
+      movableColor: s.whoMoves === me && me >= 0 ? myColor : null,
+      // premoves: allowed whenever you're seated and the game is running
+      premoveColor: me >= 0 && !s.result && !waitingForPlayers ? myColor : null,
+    });
+    if (s.result) board.clearPremoves();
     $('modeLabel').textContent = s.mode === 'boss' ? `Boss Raid vs ${s.bossName} · Room ${s.code}` : `1v1 · Room ${s.code}`;
 
     const waiting = s.players.some((p) => !p);

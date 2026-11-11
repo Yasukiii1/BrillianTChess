@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Board Themes</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .gallery { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 22px; max-width: 1200px; margin: 0 auto; padding: 24px 16px 60px; }
+    .tile h3 { margin: 0 0 2px; }
+    .tile p { margin: 0 0 10px; color: var(--muted); font-size: 13px; }
+    .tile button { margin-top: 12px; width: 100%; }
+    .legend { max-width: 1200px; margin: 0 auto; padding: 18px 16px 0; color: var(--muted); font-size: 14px; }
+  </style>
+</head>
+<body>
+  <header class="topbar"><a class="logo" href="/">Chess <span>Co-op</span></a><span class="small">Board themes</span></header>
+  <p class="legend">Every board shows the same position. You can see the last move (yellow), the selected knight with its move dots, a <b style="color:#ff9614">right-click arrow</b> and highlighted square, and a queued <b style="color:#e55">premove</b> (red squares). Your pick is saved for every game.</p>
+  <div class="gallery" id="gallery"></div>
+  <script type="module">
+    import { Board, THEMES } from '/js/board.js';
+    const blurbs = {
+      green: 'Clean and familiar. The classic online look with the easiest-to-read contrast.',
+      wood:  'Warm tournament wood with a dark frame. Calm for long games.',
+      ocean: 'Cool slate blue that matches the dark site. Easy on the eyes at night.',
+      ember: 'Cream and crimson. Made for Boss Raids.',
+      night: 'Dark mode board with purple highlights. Moody and modern.',
+    };
+    const fen = 'r1bq1rk1/pp2bppp/2n1pn2/3p4/2PP4/2N2N2/PP2BPPP/R2QKB1R w KQ - 2 9';
+    const gal = document.getElementById('gallery');
+    let current; try { current = localStorage.getItem('chess-theme') || 'green'; } catch { current = 'green'; }
+    for (const [id, name] of Object.entries(THEMES)) {
+      const tile = document.createElement('div');
+      tile.className = 'tile card';
+      tile.innerHTML = `<h3>${name}</h3><p>${blurbs[id]}</p><div class="b"></div><button class="${id === current ? 'primary' : ''}">${id === current ? 'Current board' : 'Use this board'}</button>`;
+      gal.appendChild(tile);
+      const b = new Board(tile.querySelector('.b'), { theme: id });
+      b.setPosition(fen, { lastMove: { from: 'b8', to: 'c6' } });
+      b.showcase({
+        arrows: [{ from: 'f3', to: 'e5', color: 'orange' }, { from: 'd1', to: 'b3', color: 'green' }],
+        marks: [{ sq: 'd5', color: 'red' }],
+        premoves: [{ from: 'c4', to: 'd5' }],
+        selected: 'f3',
+      });
+      tile.querySelector('button').onclick = () => { b.setTheme(id); location.reload(); };
+    }
+  </script>
+</body>
+</html>

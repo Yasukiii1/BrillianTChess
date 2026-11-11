@@ -1,5 +1,22 @@
 // Small helpers shared by the local and online game pages.
+import { THEMES } from './board.js';
+
 export const $ = (id) => document.getElementById(id);
+
+const SWATCH = { green: ['#eeeed2', '#769656'], wood: ['#f0d9b5', '#b58863'], ocean: ['#dee3e6', '#8ca2ad'], ember: ['#f3dfc9', '#b8574a'], night: ['#b7bfd2', '#6d7899'] };
+export function themePicker(board) {
+  const box = $('themePick');
+  if (!box) return;
+  const paint = () => [...box.children].forEach((b) => b.classList.toggle('on', b.dataset.t === board.el.dataset.theme));
+  for (const [id, name] of Object.entries(THEMES)) {
+    const b = document.createElement('button');
+    b.dataset.t = id; b.title = name;
+    b.style.setProperty('--a', SWATCH[id][0]); b.style.setProperty('--b', SWATCH[id][1]);
+    b.onclick = () => { board.setTheme(id); paint(); };
+    box.appendChild(b);
+  }
+  paint();
+}
 
 export function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
