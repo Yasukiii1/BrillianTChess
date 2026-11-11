@@ -1,7 +1,7 @@
 // Online rooms: Boss Raid (co-op) and 1v1. The server decides everything; this
 // page just shows the server's state and sends your moves.
 import { Board } from './board.js';
-import { $, esc, renderMoves, setStatus, strip, showBanner, button, themePicker } from './ui.js';
+import { $, esc, renderMoves, setStatus, strip, showBanner, button, themePicker, saveForReview } from './ui.js';
 import { getName, setName, getToken } from './identity.js';
 
 export function startOnline(code) {
@@ -41,7 +41,31 @@ export function startOnline(code) {
   const resignBtn = button('Resign', () => {
     if (confirm('Resign this game?')) socket.emit('resign', null, (r) => r?.error && flash(r.error));
   });
-  $('controls').append(button('Flip', () => { board.flip(); render(); }), resignBtn, rematchBtn);
+  const reviewBtn = button('Game review', openReview);
+  $('controls').append(button('Flip', () => { board.flip(); render(); }), resignBtn, rematchBtn, reviewBtn);
+
+  function openReview() {
+    const s = state;
+    if (!s || !s.moves.length) return;
+    const me = s.yourSeat;
+    const pname = (i) => (s.players[i] ? s.players[i].name : 'P' + (i + 1));
+    let white, black, labels;
+    if (s.mode === 'boss') {
+      const team = `${pname(0)} & ${pname(1)}`;
+      white = s.teamColor === 'w' ? team : s.bossName;
+      black = s.teamColor === 'b' ? team : s.bossName;
+      // label every move with who played it, so P1 and P2 each get their own accuracy
+      labels = s.moves.map((m) => (m.who === 'Boss' ? s.bossName : m.who === 'P1' ? `P1 ${pname(0)}` : `P2 ${pname(1)}`));
+    } else {
+      white = pname(0); black = pname(1);
+    }
+    saveForReview({
+      startFen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+      sans: s.moves.map((m) => m.san), labels, white, black,
+      orientation: me >= 0 ? seatColor(s, me) : 'w', result: s.result ? s.result.result : '*',
+    });
+    window.open('/review.html', '_blank');
+  }
 
   // ----- connection -----
   socket.on('connect', () => {
@@ -89,6 +113,7 @@ export function startOnline(code) {
     $('sharePanel').classList.toggle('hidden', !waiting);
     resignBtn.disabled = me < 0 || !!s.result || waiting;
     rematchBtn.disabled = me < 0 || !(s.result || s.moves.length === 0) || waiting;
+    reviewBtn.disabled = !s.result; // no peeking at the engine mid-game!
 
     // ----- player strips -----
     const playerName = (i) => (s.players[i] ? s.players[i].name : 'Waiting…');
@@ -132,7 +157,8 @@ export function startOnline(code) {
       if (bannerShownFor !== s.gameNo) {
         bannerShownFor = s.gameNo;
         showBanner(resultTitle(s, me), `${s.result.reason} · ${s.result.result}`, [
-          ...(me >= 0 ? [{ label: 'Rematch', primary: true, onClick: () => rematchBtn.click() }] : []),
+          { label: 'Game review', primary: true, onClick: openReview },
+          ...(me >= 0 ? [{ label: 'Rematch', onClick: () => rematchBtn.click() }] : []),
           { label: 'Look at board' },
         ]);
       }

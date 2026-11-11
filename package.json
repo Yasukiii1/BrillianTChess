@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
-    "test": "node test/rookie.test.js && node test/coop.test.js"
+    "test": "node test/rookie.test.js && node test/review.test.js && node test/coop.test.js"
   },
   "engines": {
     "node": ">=18"

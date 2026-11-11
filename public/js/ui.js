@@ -78,3 +78,6 @@ export function gameOverReason(chess) {
   if (chess.isDrawByFiftyMoves()) return { result: '½-½', reason: '50-move rule', winner: null };
   return null;
 }
+
+// Hand a finished game to the review page (/review.html).
+export function saveForReview(d) { try { localStorage.setItem('chess-review', JSON.stringify(d)); } catch { /* ignore */ } }

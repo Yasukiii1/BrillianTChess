@@ -160,6 +160,26 @@ export class Board {
     this.#paintSquares();
     this.#paintPieces(animate);
     this.#drawArrows();
+    this.#drawBadge();
+  }
+
+  /** Review mode extras: engine arrows and a move-quality badge on a square. */
+  setDecor({ arrows = [], badge = null } = {}) {
+    this.arrows = arrows;
+    this.badge = badge; // { sq, icon, color }
+    this.#drawArrows();
+    this.#drawBadge();
+  }
+
+  #drawBadge() {
+    let el = this.el.querySelector('.b-badge');
+    if (!this.badge) { if (el) el.remove(); return; }
+    if (!el) { el = document.createElement('div'); el.className = 'b-badge'; this.el.appendChild(el); }
+    const [x, y] = this.#xy(this.badge.sq);
+    el.style.left = `calc(${(x + 1) * 12.5}% - 3.4%)`;
+    el.style.top = `calc(${y * 12.5}% - 1.6%)`;
+    el.style.background = this.badge.color;
+    el.textContent = this.badge.icon;
   }
 
   #targets() {

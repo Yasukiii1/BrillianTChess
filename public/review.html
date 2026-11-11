@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Game Review</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <header class="topbar"><a class="logo" href="/">Chess <span>Co-op</span></a><span class="small" id="title">Game review</span></header>
+
+  <main class="review" id="main">
+    <section>
+      <div class="player-strip" id="topName"></div>
+      <div class="board-wrap">
+        <div class="evalbar" id="evalbar"><div class="white" id="evalWhite" style="height:50%"></div><span class="num top" id="evalTop"></span><span class="num bottom" id="evalBottom"></span></div>
+        <div id="board"></div>
+      </div>
+      <div class="player-strip" id="bottomName"></div>
+      <div class="nav" style="margin-top:6px">
+        <button id="first" title="Start (Home)">⏮</button><button id="prev" title="Back (←)">◀</button>
+        <button id="next" title="Forward (→)">▶</button><button id="last" title="End (End)">⏭</button>
+        <button id="flip" title="Flip board">⇅</button>
+      </div>
+    </section>
+
+    <aside class="side rv-panel">
+      <div class="row" style="align-items:end">
+        <div style="flex:2"><label for="depth" style="margin-top:0">Engine check</label>
+          <select id="depth">
+            <option value="10">Fast (depth 10)</option>
+            <option value="14" selected>Normal (depth 14)</option>
+            <option value="18">Deep (depth 18, most accurate)</option>
+          </select></div>
+        <button id="rerun" style="flex:1">Analyze</button>
+      </div>
+      <div id="progWrap"><div class="small" id="progText">Starting Stockfish…</div><div class="progress"><div id="prog"></div></div></div>
+      <div class="rv-head" id="summary"></div>
+      <svg class="graph" id="graph" preserveAspectRatio="none"></svg>
+      <div class="rv-comment" id="comment"></div>
+      <div class="rv-moves" id="moves"></div>
+      <details>
+        <summary>Review a different game (paste PGN)</summary>
+        <textarea id="pgn" rows="4" style="width:100%;margin-top:8px;font:12px ui-monospace,monospace;background:var(--panel-2);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:8px"></textarea>
+        <button id="loadPgn" style="margin-top:6px;width:100%">Review this PGN</button>
+      </details>
+    </aside>
+  </main>
+
+  <script type="module" src="/js/review/review-page.js"></script>
+</body>
+</html>

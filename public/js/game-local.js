@@ -2,7 +2,7 @@
 import { Chess } from '/vendor/chess.js';
 import { Board } from './board.js';
 import { RookieEngine, StockfishEngine } from './engines.js';
-import { $, renderMoves, setStatus, strip, showBanner, button, gameOverReason, themePicker } from './ui.js';
+import { $, renderMoves, setStatus, strip, showBanner, button, gameOverReason, themePicker, saveForReview } from './ui.js';
 import { getName } from './identity.js';
 
 export function startLocal({ opp, color }) {
@@ -29,6 +29,7 @@ export function startLocal({ opp, color }) {
     button('Undo', undo),
     button('Flip', () => { board.flip(); refresh(); }),
     button('Resign', resign),
+    button('Game review', openReview),
   );
   $('fenLoad').onclick = () => {
     const fen = $('fenInput').value.trim();
@@ -74,7 +75,8 @@ export function startLocal({ opp, color }) {
     if (!over) return false;
     const title = over.reason === 'checkmate' ? (over.winner === myColor ? 'You win!' : 'You lost') : 'Draw';
     showBanner(title, `${over.reason} · ${over.result}`, [
-      { label: 'Rematch', primary: true, onClick: () => newGame(myColor) },
+      { label: 'Game review', primary: true, onClick: openReview },
+      { label: 'Rematch', onClick: () => newGame(myColor) },
       { label: 'Look at board' },
     ]);
     return true;
@@ -133,7 +135,19 @@ export function startLocal({ opp, color }) {
     if (gameOverReason(chess) || resigned) return;
     gameId++; thinking = false; resigned = true;
     refresh();
-    showBanner('You resigned', 'Better luck next time.', [{ label: 'New game', primary: true, onClick: () => newGame(myColor) }, { label: 'Close' }]);
+    showBanner('You resigned', 'Better luck next time.', [{ label: 'Game review', primary: true, onClick: openReview }, { label: 'New game', onClick: () => newGame(myColor) }, { label: 'Close' }]);
+  }
+
+  function openReview() {
+    if (!chess.history().length) { setStatus('Play some moves first'); return; }
+    const me = getName() || 'You';
+    const over = gameOverReason(chess);
+    saveForReview({
+      startFen, sans: chess.history(), orientation: myColor,
+      white: myColor === 'w' ? me : engine.name, black: myColor === 'b' ? me : engine.name,
+      result: resigned ? (myColor === 'w' ? '0-1' : '1-0') : over ? over.result : '*',
+    });
+    window.open('/review.html', '_blank');
   }
 
   newGame(myColor);
