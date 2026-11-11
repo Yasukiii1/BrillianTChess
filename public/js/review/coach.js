@@ -38,8 +38,11 @@ function playLine(Chess, fen, ucis, maxPlies = 8) {
   const caps = { w: [], b: [] };
   const sans = [];
   const fens = [c.fen()];
-  for (const u of ucis.slice(0, maxPlies)) {
-    const m = uciMove(c, u);
+  for (let i = 0; i < ucis.length; i++) {
+    // stop after maxPlies, but never in the middle of a trade (finish recaptures, up to +4)
+    const lastWasCapture = i > 0 && /x/.test(sans[sans.length - 1] || '');
+    if (i >= maxPlies && (!lastWasCapture || i >= maxPlies + 4)) break;
+    const m = uciMove(c, ucis[i]);
     if (!m) break;
     if (m.captured) caps[m.color].push(m.captured);
     if (m.promotion) caps[m.color].push('promo:' + m.promotion);
@@ -205,6 +208,49 @@ const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
  * Returns { text: [sentences], lines: [{ title, fen, ucis, sans }] }
  */
 export function explain(Chess, m, prev) {
+  const res = explainCore(Chess, m, prev);
+  if (m && m.label && m.label !== 'forced' && m.label !== 'book') addConsequences(Chess, m, res.lines);
+  return res;
+}
+
+/** The opponent's cheapest legal capture of the piece that just moved (if it's worth a piece). */
+function captureOf(Chess, m) {
+  const c = new Chess(m.fenBefore);
+  const mv = uciMove(c, m.uci);
+  if (!mv || mv.piece === 'k' || VAL[mv.promotion || mv.piece] < 3) return null;
+  const caps = c.moves({ verbose: true }).filter((x) => x.to === mv.to);
+  if (!caps.length) return null;
+  caps.sort((a, b) => VAL[a.piece] - VAL[b.piece]);
+  const t = caps[0];
+  return { uci: t.from + t.to + (t.promotion || ''), san: t.san, piece: mv.promotion || mv.piece };
+}
+
+/**
+ * Lines that show the CONSEQUENCES of the move actually played:
+ *  - "What if Black takes the bishop (Kxc4)?": the capture, then the engine's best play.
+ *    Marked probe:true when Stockfish still has to calculate the rest.
+ *  - "What happens after Bxc4": your move, then the opponent's best answer.
+ */
+function addConsequences(Chess, m, lines) {
+  const them = other(m.color);
+  const same = (a, b) => a.slice(0, 3).join(' ') === b.slice(0, 3).join(' ');
+  const has = (ucis) => lines.some((l) => same(l.ucis, ucis));
+  const mk = (title, ucis, probe = false) => ({ title, fen: m.fenBefore, ucis: ucis.slice(0, 10), sans: lineToSan(Chess, m.fenBefore, ucis, 10), probe });
+  const take = captureOf(Chess, m);
+  if (take) {
+    const title = `What if ${SIDE[them]} takes the ${NAME[take.piece]} (${take.san})?`;
+    const u = m.replyLine?.[0] === take.uci ? [m.uci, ...m.replyLine] : [m.uci, take.uci];
+    const dup = u.length > 2 && lines.find((l) => same(l.ucis, u));
+    if (dup) dup.title = `${title} Show why it ${m.label === 'brilliant' || m.label === 'great' || m.label === 'best' ? 'fails' : 'happens'}`;
+    else lines.unshift(mk(title, u, u.length === 2));
+  }
+  if (m.replyLine?.length) {
+    const u = [m.uci, ...m.replyLine];
+    if (!has(u)) lines.push(mk(`What happens after ${m.san}`, u));
+  }
+}
+
+function explainCore(Chess, m, prev) {
   const text = [];
   const lines = [];
   if (!m || !m.label) return { text, lines };
@@ -257,7 +303,8 @@ export function explain(Chess, m, prev) {
     const o = outcome(bestRun, me);
     if (L === 'best') {
       text.push(played.ideas.length ? `${cap(join(played.ideas))}.` : 'The strongest move in the position, improving the pieces without allowing anything.');
-      if (o && !played.ideas.some((i) => i.includes('checkmate'))) text.push(`Following the best line, ${SIDE[me]} ${o}.`);
+      const gain = bestRun ? materialPhrase(bestRun.caps, me).net : 0;
+      if (o && (gain > 0 || (bestRun.mate && bestRun.loser === them)) && !played.ideas.some((i) => i.includes('checkmate'))) text.push(`Following the best line, ${SIDE[me]} ${o}.`);
       if (m.bestLine?.length) lines.push(lineFor('Show the best line', m.bestLine));
     } else {
       text.push(`A ${L === 'excellent' ? 'very good' : 'decent'} move${played.ideas.length ? ' that ' + join(played.ideas) : ''}.`);
@@ -297,4 +344,4 @@ export function explain(Chess, m, prev) {
   return { text, lines };
 }
 
-export const _internals = { materialPhrase, forkTargets, pinOrSkewer, mateThreats, playLine, moveIdeas };
+export const _internals = { captureOf, materialPhrase, forkTargets, pinOrSkewer, mateThreats, playLine, moveIdeas };

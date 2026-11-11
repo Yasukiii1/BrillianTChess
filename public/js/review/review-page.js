@@ -40,7 +40,8 @@ function start() {
   result = classify(game, analyses, labelOf);
   cur = game.plies.length - 1;
   if (!board) {
-    board = new Board($('board'));
+    board = new Board($('board'), { onMove: (f, t, p) => exploreMove(f, t, p) });
+    $('explore').onclick = () => startExplore(cur >= 0 ? game.plies[cur].fenAfter : game.startFen);
     $('first').onclick = () => (vline ? stepLine(-99) : go(-1));
     $('prev').onclick = () => (vline ? stepLine(-1) : go(cur - 1));
     $('next').onclick = () => (vline ? stepLine(1) : go(cur + 1));
@@ -57,6 +58,8 @@ function start() {
       if (vline && e.key === 'ArrowLeft') stepLine(-1);
       else if (vline && e.key === 'ArrowRight') stepLine(1);
       else if (vline && e.key === 'Escape') stopLine();
+      else if (explore && e.key === 'Escape') stopExplore();
+      else if (explore) return; // arrow keys don't leave Explore by accident
       else if (e.key === 'ArrowLeft') go(cur - 1);
       else if (e.key === 'ArrowRight') go(cur + 1);
       else if (e.key === 'Home') go(-1);
@@ -72,7 +75,7 @@ function start() {
   run(+$('depth').value);
 }
 
-const go = (i) => { if (vline) stopLine(false); cur = Math.max(-1, Math.min(game.plies.length - 1, i)); show(); };
+const go = (i) => { if (vline) stopLine(false); explore = null; cur = Math.max(-1, Math.min(game.plies.length - 1, i)); show(); };
 
 // ---------- analysis ----------
 async function run(depth) {
@@ -170,8 +173,30 @@ function uciToSan(fen, uci) {
 let coachLines = [];
 let vline = null; // { title, fens, moves:[{from,to,san}], idx, timer }
 
-function startLine(line) {
+// Analyse a position (cached results first). Used by probe lines and Explore mode.
+async function analyse(fen, depth = 16) {
+  const t = new Chess(fen);
+  if (t.isCheckmate()) return { terminal: 'mate' };
+  if (t.isGameOver()) return { terminal: 'draw' };
+  const hit = getEval(fen, depth);
+  if (hit) return hit;
+  if (!pool) pool = new AnalyzerPool();
+  const a = await pool.analyze(fen, depth);
+  if (a) putEval(fen, a);
+  return a;
+}
+
+async function startLine(line) {
   stopLine(false);
+  if (line.probe) {
+    // "What if they take?": Stockfish still has to work out what happens after the capture.
+    $('comment').innerHTML = `<b>▶ ${esc(line.title)}</b><div class="small" style="margin-top:6px">Stockfish is working out what happens after ${esc(line.sans)}…</div>`;
+    const c0 = new Chess(line.fen);
+    for (const u of line.ucis) c0.move({ from: u.slice(0, 2), to: u.slice(2, 4), promotion: u[4] || undefined });
+    const a = await analyse(c0.fen(), 16);
+    const more = a?.lines?.[0]?.pv || [];
+    line = { ...line, probe: false, ucis: [...line.ucis, ...more].slice(0, 12) };
+  }
   const c = new Chess(line.fen);
   const fens = [c.fen()], moves = [];
   for (const u of line.ucis) {
@@ -199,7 +224,87 @@ function stepLine(d) {
 function stopLine(redraw = true) {
   if (vline) clearInterval(vline.timer);
   vline = null;
-  if (redraw) show();
+  if (redraw) (explore ? renderExplore() : show());
+}
+
+// ---------- Explore: play your own moves, the engine answers, the coach judges ----------
+let explore = null; // { userColor, stack:[{fen,lastMove}], busy, info, badge }
+
+function startExplore(fen) {
+  stopLine(false);
+  explore = { userColor: new Chess(fen).turn(), stack: [{ fen, lastMove: null }], busy: false, info: null, badge: null };
+  renderExplore();
+}
+function stopExplore() { explore = null; show(); }
+const exploreTop = () => explore.stack[explore.stack.length - 1];
+
+function renderExplore() {
+  const { fen, lastMove } = exploreTop();
+  const c = new Chess(fen);
+  const over = c.isGameOver();
+  const myTurn = !explore.busy && !over && c.turn() === explore.userColor;
+  board.setPosition(fen, { lastMove, movableColor: myTurn ? explore.userColor : null });
+  board.setDecor({ arrows: [], badge: explore.badge });
+  const side = explore.userColor === 'w' ? 'White' : 'Black';
+  let status;
+  if (over) status = c.isCheckmate() ? '<b>Checkmate!</b>' : '<b>Draw.</b>';
+  else if (explore.busy) status = 'Stockfish is judging your move and finding the best reply…';
+  else status = `Your turn as <b>${side}</b>: drag or click a piece to try any move.`;
+  let html = `<div class="vline-head"><b>🔍 Explore: try your own moves</b><button id="exitExplore">✕ Back to game</button></div>` +
+    `<div class="small" style="margin:6px 0">${status}</div>`;
+  const inf = explore.info;
+  if (inf && inf.m?.label) {
+    const L = LABELS[inf.m.label];
+    html += `${ico(inf.m.label)} <b style="color:${L.color}">Your ${esc(inf.san)}: ${L.name}</b>` +
+      `<div class="coach"><span class="coach-tag">Coach</span>${inf.ex.text.map((t) => `<p>${esc(t)}</p>`).join('')}</div>` +
+      inf.ex.lines.map((l, i) => `<button class="line-btn" data-line="${i}">▶ ${esc(l.title)}</button><div class="line-san">${esc(l.sans)}</div>`).join('') +
+      (inf.reply ? `<div class="small" style="margin-top:6px">Stockfish answered <b>${esc(inf.reply)}</b> (best reply). Eval now: ${esc(inf.evalTxt)}.</div>` : '');
+  }
+  html += `<div class="row" style="margin-top:8px"><button id="exUndo"${explore.stack.length > 1 && !explore.busy ? '' : ' disabled'}>↶ Undo my move</button></div>`;
+  $('comment').innerHTML = html;
+  coachLines = inf?.ex?.lines || [];
+  $('comment').querySelectorAll('.line-btn').forEach((b) => (b.onclick = () => startLine(coachLines[+b.dataset.line])));
+  $('exitExplore').onclick = stopExplore;
+  $('exUndo').onclick = () => {
+    explore.stack.pop();
+    while (explore.stack.length > 1 && new Chess(exploreTop().fen).turn() !== explore.userColor) explore.stack.pop();
+    explore.info = null; explore.badge = null;
+    renderExplore();
+  };
+}
+
+async function exploreMove(from, to, promotion) {
+  if (!explore || explore.busy) return;
+  const before = exploreTop().fen;
+  const c = new Chess(before);
+  let mv;
+  try { mv = c.move({ from, to, promotion }); } catch { renderExplore(); return; }
+  const after = c.fen();
+  explore.stack.push({ fen: after, lastMove: { from, to } });
+  explore.busy = true; explore.info = null; explore.badge = null;
+  renderExplore();
+  const [aB, aA] = await Promise.all([analyse(before), analyse(after)]);
+  if (!explore || exploreTop().fen !== after) return; // user left or undid meanwhile
+  // judge the move exactly like a game move
+  const r = classify(buildGame(Chess, before, [mv.san]), [aB, aA], () => 'You');
+  const m = r.moves[0];
+  const info = { m, san: mv.san, ex: m.label ? explain(Chess, m, null) : { text: [], lines: [] } };
+  explore.badge = m.label ? { sq: mv.to, icon: LABELS[m.label].icon, color: LABELS[m.label].color } : null;
+  // Stockfish plays the opponent's best reply
+  const replyUci = aA?.lines?.[0]?.pv?.[0];
+  if (replyUci) {
+    await new Promise((res) => setTimeout(res, 450));
+    if (!explore || exploreTop().fen !== after) return;
+    const c2 = new Chess(after);
+    const rm = c2.move({ from: replyUci.slice(0, 2), to: replyUci.slice(2, 4), promotion: replyUci[4] || undefined });
+    explore.stack.push({ fen: c2.fen(), lastMove: { from: rm.from, to: rm.to } });
+    info.reply = rm.san;
+    info.evalTxt = fmtScore(aA.lines[0].score, new Chess(after).turn());
+    explore.badge = null;
+  }
+  explore.info = info;
+  explore.busy = false;
+  renderExplore();
 }
 
 function renderLine() {
@@ -222,7 +327,7 @@ function renderLine() {
 }
 
 function show() {
-  if (!game || vline) return; // while a coach line is playing, leave the board alone
+  if (!game || vline || explore) return; // a coach line or Explore mode owns the board
   const p = cur >= 0 ? game.plies[cur] : null;
   const m = cur >= 0 ? result.moves[cur] : null;
   const fen = p ? p.fenAfter : game.startFen;
@@ -273,10 +378,12 @@ function show() {
       `<span class="small"> · ${esc(m.who)}</span>` +
       `<div class="coach"><span class="coach-tag">Coach</span>${ex.text.map((t) => `<p>${esc(t)}</p>`).join('')}</div>` +
       ex.lines.map((l, i) => `<button class="line-btn" data-line="${i}">▶ ${esc(l.title)}</button><div class="line-san">${esc(l.sans)}</div>`).join('') +
+      `<button class="line-btn try-btn" id="tryHere">🔍 Try a different move here</button>` +
       `<div class="small" style="margin-top:6px">Eval after: ${fmtScore(m.playedScore, p.color)} · win chance lost: ${m.loss.toFixed(1)}%</div>`;
   }
   $('comment').innerHTML = html;
-  $('comment').querySelectorAll('.line-btn').forEach((b) => (b.onclick = () => startLine(coachLines[+b.dataset.line])));
+  $('comment').querySelectorAll('.line-btn[data-line]').forEach((b) => (b.onclick = () => startLine(coachLines[+b.dataset.line])));
+  if ($('tryHere')) $('tryHere').onclick = () => startExplore(p.fenBefore);
 
   // highlight in move list
   $('moves').querySelectorAll('.m').forEach((el) => el.classList.toggle('cur', +el.dataset.i === cur));

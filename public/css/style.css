@@ -202,3 +202,4 @@ details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 .vline .vm { cursor: pointer; padding: 1px 4px; border-radius: 4px; }
 .vline .vm:hover { background: var(--panel-2); }
 .vline .vm.cur { background: rgba(40,140,255,.35); }
+.try-btn { border-style: dashed; }

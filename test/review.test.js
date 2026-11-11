@@ -81,6 +81,16 @@ let c = new Chess('r3k3/8/8/1N6/8/8/8/4K3 w - - 0 1'); let mv = c.move('Nc7+');
 assert.ok(_internals.forkTargets(c, mv), 'knight fork'); console.log('✓ fork detected');
 c = new Chess('4k3/3p4/2n5/8/8/8/8/4KB2 w - - 0 1'); c.remove('d7'); mv = c.move('Bb5');
 assert.strictEqual(_internals.pinOrSkewer(c, mv).kind, 'pin'); console.log('✓ pin detected');
+r = await review('e4 e5 Nf3 d6 Bc4 Bg4 Nc3 g6 Nxe5 Bxd1 Bxf7+ Ke7 Nd5#'.split(' '));
+let mx = r.moves.find((m) => m.san === 'Nxe5');
+let titles = explain(Chess, mx, null).lines.map((l) => l.title + (l.probe ? ' [probe]' : ''));
+console.log('  Nxe5 buttons:', titles.join(' | '));
+assert.ok(titles.some((t) => /What if Black takes the knight/.test(t)));
+// force the 'engine would NOT take' case: replyLine starts with another move -> probe line
+const fake = { ...mx, replyLine: ['b8c6', 'g4d1'] };
+const pl = explain(Chess, fake, null).lines.find((l) => /What if/.test(l.title));
+assert.ok(pl.probe && pl.ucis.length === 2, 'probe line when the capture is not the engine reply');
+console.log('✓ consequence lines: what-if-they-take (direct + probe), what happens after');
 console.log('✓ coach explanations look right');
 
 assert.strictEqual(fmtScore({ cp: 130 }, 'w'), '+1.3');
