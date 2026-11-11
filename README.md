@@ -5,12 +5,26 @@ two players share one army against Stockfish, taking turns
 (P1 → Boss → P2 → Boss → P1 …) with no talking.
 
 ## Run it on your PC
+**Easiest:** double-click **Start Chess Co-op.bat**. It installs packages the first time,
+starts the server and opens http://localhost:3000 in your browser. Close the black window to stop it.
+
+From a terminal instead:
 ```bash
-npm install
 npm start
 ```
-Open http://localhost:3000. To try Boss Raid alone, open the room link in two
-browser tabs. Each tab counts as a different player.
+
+**Different port:** edit the `set PORT=3000` line in the .bat file, or in PowerShell run
+`$env:PORT=8080; npm start`. Use a port from 1024 to 65535. Very low ports like 1 are
+blocked by browsers as "unsafe ports".
+
+**Don't open index.html by double-clicking it.** The pages need the server: the bots run in
+Web Workers and multiplayer goes through the server, and neither works from a `file://` page.
+
+**Friends on the same Wi-Fi** can join at `http://YOUR-PC-IP:3000`. Find the IP with `ipconfig`
+(the "IPv4 Address" line). Windows may ask you to allow Node.js through the firewall.
+Friends elsewhere should use the Render link.
+
+To try Boss Raid alone, open the room link in two browser tabs. Each tab counts as a different player.
 
 ## Tests
 ```bash
