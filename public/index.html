@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Chess Co-op</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <header class="topbar"><a class="logo" href="/">Chess <span>Co-op</span></a></header>
+
+  <main class="home">
+    <section class="hero">
+      <h1>Two heads. One board. No talking.</h1>
+      <p>Practice against a bot, play a friend, or team up for a Boss Raid. You and your partner take turns moving the same army against a chess engine, and you can't talk to each other while you play.</p>
+    </section>
+
+    <label for="name">Your name</label>
+    <input id="name" maxlength="16" placeholder="e.g. Alex" style="max-width:280px;margin-bottom:22px">
+
+    <div class="cards">
+      <div class="card">
+        <h2>Practice vs Bot</h2>
+        <p>Play alone in your browser.</p>
+        <div class="grow">
+          <label for="opp">Opponent</label>
+          <select id="opp">
+            <option value="rookie-easy">Rookie, Easy (our bot)</option>
+            <option value="rookie-medium" selected>Rookie, Medium (our bot)</option>
+            <option value="rookie-hard">Rookie, Hard (our bot)</option>
+            <option value="sf-3">Stockfish, Level 3</option>
+            <option value="sf-8">Stockfish, Level 8</option>
+            <option value="sf-14">Stockfish, Level 14</option>
+            <option value="sf-20">Stockfish, Level 20 (Final Boss)</option>
+          </select>
+          <label for="color">You play</label>
+          <select id="color">
+            <option value="w">White</option><option value="b">Black</option><option value="r">Random</option>
+          </select>
+        </div>
+        <button class="primary" id="playBot">Play</button>
+      </div>
+
+      <div class="card boss">
+        <h2>Boss Raid (co-op)</h2>
+        <p>You and a friend share one army against the Boss.</p>
+        <div class="turn-strip"><b>P1</b><b class="boss">Boss</b><b>P2</b><b class="boss">Boss</b><b>P1</b>…</div>
+        <div class="grow">
+          <label for="boss">Boss</label>
+          <select id="boss">
+            <option value="3">Goblin, Stockfish 3</option>
+            <option value="8">Knight Captain, Stockfish 8</option>
+            <option value="14" selected>Dragon, Stockfish 14</option>
+            <option value="20">The Final Boss, Stockfish 20</option>
+          </select>
+          <label for="teamColor">Your team plays</label>
+          <select id="teamColor"><option value="w">White</option><option value="b">Black</option></select>
+        </div>
+        <button class="danger" id="createBoss">Create raid room</button>
+        <div class="err" id="bossErr"></div>
+      </div>
+
+      <div class="card">
+        <h2>1v1 a Friend</h2>
+        <p>A normal online game against your friend. The room creator plays White.</p>
+        <div class="grow"></div>
+        <button class="primary" id="createDuel">Create 1v1 room</button>
+        <div class="err" id="duelErr"></div>
+      </div>
+
+      <div class="card">
+        <h2>Join a room</h2>
+        <p>Got a code from your friend?</p>
+        <div class="grow">
+          <label for="code">Room code</label>
+          <input id="code" maxlength="5" placeholder="ABCDE" style="text-transform:uppercase">
+        </div>
+        <button class="primary" id="join">Join</button>
+      </div>
+    </div>
+  </main>
+
+  <script type="module" src="/js/home.js"></script>
+</body>
+</html>

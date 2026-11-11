@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Chess Co-op · Game</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <header class="topbar"><a class="logo" href="/">Chess <span>Co-op</span></a><span class="small" id="modeLabel"></span></header>
+
+  <main class="game">
+    <section class="board-col">
+      <div class="player-strip" id="topStrip"></div>
+      <div id="board"></div>
+      <div class="player-strip" id="bottomStrip"></div>
+    </section>
+
+    <aside class="side">
+      <div class="status" id="status">Loading…</div>
+
+      <!-- online only -->
+      <div id="sharePanel" class="hidden">
+        <div class="small" style="margin-bottom:4px">Send this link to your friend:</div>
+        <div class="share"><input id="shareLink" readonly><button id="copyBtn">Copy</button></div>
+      </div>
+      <div id="seats" class="hidden"></div>
+
+      <div class="row" id="controls"></div>
+
+      <div class="moves" id="moves"></div>
+
+      <details id="fenTools" class="hidden">
+        <summary>Load a position (FEN)</summary>
+        <input id="fenInput" placeholder="paste FEN" style="margin-top:8px">
+        <div class="row" style="margin-top:6px"><button id="fenLoad">Load</button><button id="fenCopy">Copy current</button></div>
+      </details>
+    </aside>
+  </main>
+
+  <div class="banner hidden" id="banner"><div class="box"><h2 id="bannerTitle"></h2><p id="bannerText"></p><div class="row" id="bannerButtons"></div></div></div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script type="module" src="/js/play.js"></script>
+</body>
+</html>

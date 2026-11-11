@@ -1,0 +1,9 @@
+# Render.com blueprint: New -> Blueprint -> pick this repo, and it sets itself up.
+services:
+  - type: web
+    name: chess-coop
+    runtime: node
+    plan: free
+    buildCommand: npm install --omit=dev
+    startCommand: npm start
+    healthCheckPath: /healthz
